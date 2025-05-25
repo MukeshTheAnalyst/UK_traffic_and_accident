@@ -1,0 +1,106 @@
+---
+title: "**UK_traffic_and_accident_analysis**"
+author: "Mukesh Shirke"
+date: "2025-05-03"
+output: 
+  html_document:
+    theme: united
+    toc: true
+    toc_float:
+     collapsed: true
+---
+  
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+  
+  
+# **Introduction**
+  
+The UK Road Accident Analysis project investigates patterns and factors contributing to road accidents across the United Kingdom. Using official accident records, this analysis aims to uncover insights that can help policymakers, urban planners, and the public understand when, where, and under what conditions accidents are most likely to occur.
+  
+  
+# **Scenario**
+  
+Road safety is a significant concern in the UK, with thousands of accidents occurring annually. Understanding the factors that influence accident frequency and severity—such as road type, weather, time of day, and junction layout—can inform targeted interventions. The current dataset provides detailed information on each accident, including location, road class, weather, light conditions, and accident severity.
+  
+  
+# **Step 1: ASK**
+  
+### **Business Task**
+What are the key factors associated with road accident frequency and severity in the UK, and how do these factors vary by road class, time, junction type, weather, and road surface conditions?  
+  
+  
+### **Key Questions**
+**1.	Which road classes and junction types are most prone to accidents?**  
+**2. How do accident patterns vary by day of week and time of day?**  
+**3. What is the relationship between weather/road surface conditions and accident severity?**  
+**4. Are there specific conditions or locations where severe accidents are more likely?**    
+  
+  
+# **Step 2: PREPARE & PROCESS**
+  
+### **Data Selection**
+This analysis uses the UK Road Safety - Accidents and Vehicles dataset from Kaggle, contributed by Tsiaras and licensed under the Open Government Licence v3.0.
+Visit UK Road Safety dataset on Kaggle  
+  
+The dataset contains detailed records of UK road accidents reported between 2005 and 2017, including accident details, involved vehicles, and casualties. It consists of two main CSV files:  
+**Accidents.csv:** Contains details of each accident, such as date, time, location, weather conditions, and accident severity.  
+**Vehicles.csv:** Provides information about each vehicle involved in the accidents, including vehicle type, age, maneuver, and impact point.  
+  
+These files provide comprehensive data for analyzing road safety trends and factors affecting accidents across the UK.  
+  
+  
+### **Limitations of this Data**
+•	**Missing Data:** Some fields, like junction details and location, are often missing or marked as “data missing or out of range.”  
+•	**Underreporting:** Only police-reported accidents are included, so minor incidents may be missed.  
+•	**No Direct Causes:** The data describes circumstances but not the exact causes of accidents.  
+•	**Outdated Coverage:** Data stops at 2017, so recent trends aren’t captured.  
+•	**Data Quality:** Possible errors or inconsistencies due to manual entry.
+•	**Limited Detail:** Some categories (e.g., weather, road type) are broad, limiting fine-grained analysis.  
+•	**No Behavioral Data:** Lacks information on driver behavior, distractions, or vehicle telematics.  
+  
+  
+### **Environment**
+**R Studio** was used to complete this analysis because it has many excellent data processing and visualization features.
+  
+**Install packages**
+  
+```{r libs, message=FALSE}
+# Package names
+packages <- c(
+            "tidyverse",
+            "here",
+            "knitr", "rmarkdown",
+            "ggplot2", "dplyr", "tidyr", "janitor",
+            "lubridate",
+            "todor","lintr",
+            "DT", "kableExtra",
+            "roxygen2", "testthat", "scales",
+            "ggpubr"
+          )
+
+#Install packages not yet installed
+installed_packages <- packages %in% rownames(installed.packages())
+if (any(installed_packages == FALSE)) {
+  install.packages(packages[!installed_packages])
+}
+
+# Packages loading
+lapply(packages, library, character.only = TRUE) |> 
+  invisible()
+```
+  
+**Set Working Directory**
+```{r, results= FALSE}
+getwd()
+```
+  
+**Import Data**  
+  
+For this analysis, I imported one key datasets:  
+•	Accidents.csv  
+```{r}
+accidents <- read.csv("Accident_Information.csv", header = TRUE, sep = ",")
+```
+  
