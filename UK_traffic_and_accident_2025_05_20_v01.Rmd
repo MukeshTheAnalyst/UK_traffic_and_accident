@@ -137,17 +137,522 @@ Unusual or out-of-range values (such as "Data missing or out of range" for junct
   
   
 ### **Data Cleaning**
+ 
   
-**Identify and Remove Duplicates Values**
+**Standardize Column Names**  
   
-```{r}
-# Check how many duplicate rows there are
-sum(duplicated(accidents))
+```{r, results= FALSE}
+accidents <- clean_names(accidents)
+colnames(accidents)
 ```
   
 ```{r}
-# Remove duplicate rows
-accidents <- accidents[!duplicated(accidents), ]
+accidents <- accidents %>%
+  rename(
+    first_road_class = `x1st_road_class`,
+    first_road_number = `x1st_road_number`,
+    second_road_class = `x2nd_road_class`,
+    second_road_number = `x2nd_road_number`
+  )
 ```
   
+  
+**Verify uniqueness of accident_index**
+  
+```{r}
+# Count the number of duplicated Accident_Index values
+num_duplicates <- sum(duplicated(accidents$accident_index))
+cat("Number of duplicated Accident_Index values:", num_duplicates, "\n")
+```
+  
+```{r}
+library(dplyr)
+
+# Remove duplicated Accident_Index rows, keeping only the first occurrence
+accidents_no_duplicates <- accidents %>%
+  distinct(accident_index, .keep_all = TRUE)
+
+# If you want to overwrite the original data frame
+accidents <- accidents_no_duplicates
+
+#Check that duplicates are gone
+sum(duplicated(accidents$Accident_Index))
+```
+  
+  
+# **Step 3: ANALYSE & SHARE**
+  
+### **3.1 Temporal Patterns:**
+
+### Top 25 Class A roads with highest accident counts  
+  
+```{r}
+# Filter only Class A accidents
+class_a_accidents <- accidents %>%
+  filter(first_road_class == "A")
+
+# Count number of accidents per road number
+road_counts <- class_a_accidents %>%
+  group_by(first_road_number) %>%
+  summarise(accident_count = n()) %>%
+  arrange(desc(accident_count))
+
+# Get top 25 roads with highest accident counts
+top25_roads <- road_counts %>%
+  slice_max(order_by = accident_count, n = 25)
+
+# Create the bar chart
+library(ggplot2)
+
+ggplot(top25_roads, aes(x = reorder(as.factor(first_road_number), accident_count), y = accident_count)) +
+  geom_bar(stat = "identity", fill = "#BB3E00") +
+  geom_text(aes(label = accident_count), 
+            hjust = -0.1,           # Adjusts the position of the label
+            size = 3.0, 
+            color = "#BB3E00") +
+  coord_flip() +
+  labs(
+    title = "Top 25 Roads with Most Class A Accidents",
+    x = "Road Number",
+    y = "Number of Accidents"
+  ) +
+  theme_minimal() +
+  ylim(0, max(top25_roads$accident_count) * 1.1)  # Adds some space for the labels
+
+```
+  
+**Conclusion:**  
+The analysis identified the top 25 roads with the highest number of accidents on roads classified as 'A'. The results show that a small subset of 'A' roads accounts for a disproportionately high number of accidents compared to others. This concentration suggests that certain 'A' roads may have specific risk factors—such as higher traffic volumes, complex intersections, or challenging road layouts—that contribute to increased accident frequency.  
+  
+  
+### Accident frequency by day of week for Road Class  
+  
+```{r}
+# Ensure day_of_week is a factor with correct order
+accidents <- accidents %>%
+  mutate(
+    day_of_week = factor(day_of_week, 
+                         levels = c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"),
+                         ordered = TRUE),
+    first_road_class = as.factor(first_road_class)
+  )
+
+accident_counts <- accidents %>%
+  group_by(first_road_class, day_of_week) %>%
+  summarise(count = n(), .groups = "drop")
+
+# Line plot
+
+library(scales)
+ggplot(accident_counts, aes(x = day_of_week, y = count, color = first_road_class, group = first_road_class)) +
+  geom_line(linewidth = 1.2) +   # <-- use linewidth instead of size
+  geom_point(size = 2) +
+  labs(
+    title = "Day-of-Week Wise Accident Count by Road Class",
+    x = "Day of Week",
+    y = "Accident Count",
+    color = "Road Class"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_y_continuous(labels = label_number(scale = 0.001, suffix = "K"))
+```
+  
+**Conclusion:**  
+  The line plot of accident counts by day of the week and road class reveals distinct temporal patterns for different road classes. Typically, accident frequencies fluctuate across the week, with some road classes experiencing peaks on weekdays (possibly due to commuter traffic) and others showing higher counts on weekends. For example, major roads (such as class 'A' or 'B') may exhibit increased accident counts during workdays, while minor or unclassified roads might see more accidents during weekends, reflecting changes in travel behavior. 
+  
+  
+**Peak Accident Frequency for Class 'A' Roads Observed on Fridays**  
+  
+```{r}
+# Filter and count
+num_a_friday <- sum(accidents$`first_road_class` == "A" & accidents$day_of_week == "Friday", na.rm = TRUE)
+
+cat("Number of accidents where first_road_class is 'A' and Day_of_Week is 'Friday':", num_a_friday, "\n")
+```
+  
+### Accident frequency by hour for Road Class  
+  
+```{r}
+# Extract hour from the time column, handling missing/malformed values
+accidents <- accidents %>%
+  mutate(
+    hour = as.numeric(str_sub(time, 1, 2)),
+    first_road_class = as.factor(first_road_class)
+  ) %>%
+  filter(!is.na(hour) & hour >= 0 & hour <= 23)
+
+# Count accidents by road class and hour
+accident_counts_hour <- accidents %>%
+  group_by(first_road_class, hour) %>%
+  summarise(count = n(), .groups = "drop")
+
+# Line plot
+ggplot(accident_counts_hour, aes(x = hour, y = count, color = first_road_class, group = first_road_class)) +
+  geom_line(size = 1.2) +
+  geom_point(size = 2) +
+  labs(
+    title = "Hourly Accident Frequency by Road Class",
+    x = "Hour of Day",
+    y = "Accident Count",
+    color = "Road Class"
+  ) +
+  scale_x_continuous(breaks = 0:23) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.5)) +
+  scale_y_continuous(labels = label_number(scale = 0.001, suffix = "K"))  
+```
+  
+**Conclusion:**  
+The hourly analysis of accident frequency across different road classes reveals clear temporal patterns in road safety risks. Most road classes exhibit distinct peaks in accident counts during specific hours of the day, often corresponding to morning and evening rush hours. For example, higher accident frequencies are typically observed between 7–9 AM and 4–7 PM, aligning with periods of increased traffic volume due to commuting. The patterns may vary in magnitude and timing between different road classes, suggesting that the type of road influences when accidents are most likely to occur.  
+  
+  
+### Accident frequency by hour on Friday  
+  
+```{r}
+# Filter for Friday
+friday_accidents <- accidents %>%
+  filter(day_of_week == "Friday")
+
+# Safely extract hour from Time (handles missing or malformed times)
+friday_accidents <- friday_accidents %>%
+  mutate(
+    Hour = as.numeric(str_sub(time, 1, 2)),
+    Hour = ifelse(is.na(Hour) | Hour < 0 | Hour > 23, NA, Hour)
+  ) %>%
+  filter(!is.na(Hour))
+
+# Count accidents by 1st_Road_Class and Hour
+accident_counts <- friday_accidents %>%
+  group_by(`first_road_class`, Hour) %>%
+  summarise(Count = n(), .groups = "drop")
+
+# Plot line graph
+ggplot(accident_counts, aes(x = Hour, y = Count, color = `first_road_class`)) +
+  geom_line(size = 1.2) +
+  labs(
+    title = "Friday Accident Counts by Road Class and Hour",
+    x = "Hour of Day",
+    y = "Number of Accidents",
+    color = "1st Road Class"
+  ) +
+  scale_x_continuous(breaks = 0:23) +
+  theme_minimal()
+```
+  
+**Conclusion:**  
+The analysis of accident frequency by hour on Fridays reveals pronounced temporal trends across different road classes. Accident counts tend to peak during specific hours, particularly aligning with morning and evening rush periods. For most road classes, there is a noticeable increase in accidents during the late afternoon and early evening, likely corresponding to increased traffic volumes as people commute home from work or school. Some road classes may also show elevated accident rates in the late evening, possibly reflecting social or leisure travel.  
+  
+  
+### **3.2 Road Class & Junction Detail:**  
+  
+•	Bar charts revealed higher accident counts on certain road classes (e.g., Class A) and at specific junction types (e.g., roundabouts, crossroads).  
+  
+### Accident Counts by Road Class  
+  
+```{r, fig.width=5, fig.height=3.5}
+
+# Count accidents by road class
+road_class_counts <- accidents %>%
+  group_by(`first_road_class`) %>%
+  summarise(Count = n())
+
+# Bar chart with reversed axes, adjusted labels, and hidden x-axis numbers
+ggplot(road_class_counts, aes(y = `first_road_class`, x = Count)) +
+  geom_bar(stat = "identity", fill = "#BB3E00") +
+  geom_text(aes(label = Count), hjust = -0.1, color = "black", size = 3) +
+  labs(
+    title = "Accident Counts by Road Class",
+    y = "Road Class",
+    x = "Number of Accidents"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  xlim(0, max(road_class_counts$Count) * 1.1) +
+  scale_x_continuous(labels = NULL)
+```
+  
+**Conclusion:**  
+The analysis of accident counts by road class demonstrates that certain road classes experience significantly higher numbers of accidents compared to others. In your dataset, 'A' class roads and 'Unclassified' roads appear to have the highest accident frequencies, while 'B' and 'C' class roads show comparatively lower counts. This suggests that major roads (such as 'A' roads) and roads that are not formally classified are more prone to accidents, possibly due to higher traffic volumes, greater exposure, or less consistent road management.  
+  
+  
+###Accident Counts by Junction Type  
+  
+```{r}
+# Exclude 'Data missing or out of range' and Count accidents by junction type
+
+junction_type_counts <- accidents %>%
+  filter(junction_detail != "Data missing or out of range") %>%
+  group_by(junction_detail) %>%
+  summarise(Count = n()) %>%
+  arrange(desc(Count))
+
+# Bar chart with reversed axis and hidden scale numbers
+
+ggplot(junction_type_counts, aes(x = reorder(junction_detail, Count), y = Count)) +
+  geom_bar(stat = "identity", fill = "#BB3E00") +
+  geom_text(aes(label = Count), hjust = 1.05, color = "black", size = 4) +
+  coord_flip() +
+  labs(
+    title = "Accident Counts by Junction Type",
+    x = "Junction Type",
+    y = "Number of Accidents"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    axis.text.y = element_text(size = 9), # smaller y-axis labels
+    axis.text.x = element_blank(),        # hide x-axis tick labels (count axis)
+    axis.ticks.x = element_blank()        # hide x-axis ticks
+  )
+```
+  
+**Conclusion:**  
+The analysis of accident counts by junction type reveals that certain types of junctions are associated with a higher frequency of accidents. The most common categories, such as "Not at junction or within 20 metres," "T or staggered junction," and "Crossroads," account for the majority of incidents. This suggests that both non-junction locations and specific junction configurations present distinct safety challenges. Notably, "T or staggered junctions" and "Crossroads" are particularly prone to accidents, likely due to the complexity of vehicle movements and increased potential for conflict between road users at these points.  
+  
+  
+### Accident Type by Junction Type and Road Class  
+  
+```{r}
+# Exclude 'Data missing or out of range'
+filtered_accidents <- accidents %>%
+  filter(junction_detail != "Data missing or out of range")
+
+# Summarize counts
+junction_class_counts <- filtered_accidents %>%
+  group_by(junction_detail, `first_road_class`) %>%
+  summarise(Count = n(), .groups = "drop")
+
+# Prepare for alternate highlighting
+junction_levels <- junction_class_counts %>%
+  group_by(junction_detail) %>%
+  summarise(total = sum(Count)) %>%
+  arrange(desc(total)) %>%
+  mutate(row_id = row_number(),
+         highlight = ifelse(row_id %% 2 == 0, "gray", "white"))
+
+junction_class_counts <- left_join(junction_class_counts, junction_levels[, c("junction_detail", "row_id", "highlight")], by = "junction_detail")
+
+# Plot
+ggplot(junction_class_counts, aes(x = reorder(junction_detail, -row_id), y = Count, fill = `first_road_class`)) +
+  # Add alternate background rectangles
+  geom_rect(data = junction_levels, 
+            aes(ymin = -Inf, ymax = Inf, xmin = row_id - 0.5, xmax = row_id + 0.5, fill = NULL),
+            inherit.aes = FALSE,
+            fill = junction_levels$highlight,
+            alpha = 0.2) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.9)) +
+  scale_x_discrete(labels = function(x) stringr::str_wrap(x, width = 25)) + # Wrap long labels
+  labs(
+    title = "Accident Counts by Junction Type and Road Class",
+    x = "Junction Type",
+    y = "Number of Accidents",
+    fill = "Road Class"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    axis.text.y = element_text(size = 9, face = "bold"),
+    legend.position = "right"
+  ) +
+  coord_flip()
+```
+  
+**Conclusion:**  
+The analysis of accident counts by junction type and road class reveals that the distribution of accidents is not uniform across different junction configurations or road classes. Certain junction types—such as "T or staggered junctions" and "Crossroads"—consistently show higher accident frequencies, particularly for major road classes like 'A' and 'Unclassified'. In contrast, some junction types see fewer accidents or are more closely associated with minor road classes. The alternating highlight in the plot further emphasizes these differences, making it clear which combinations of junction type and road class are most at risk.  
+  
+  
+### **3.3 Severity Analysis:**  
+  
+•	Grouped bar charts showed which conditions (weather, road surface, light) are associated with more severe accidents.  
+  
+```{r}
+library(scales)
+
+# 1. Grouped bar chart: Weather_conditions vs Accident_severity
+
+weather_conditions_accident_severity <- accidents %>%
+  filter(!is.na(weather_conditions), !is.na(accident_severity)) %>%
+  group_by(weather_conditions, accident_severity) %>%
+  summarise(count = n(), .groups = "drop")
+
+ggplot(weather_conditions_accident_severity, aes(x = weather_conditions, y = count, fill = accident_severity)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(
+    title = "Accident Severity by Weather Condition",
+    x = "Weather Condition",
+    y = "Accident Count",
+    fill = "Accident Severity"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_y_continuous(labels = label_number(scale = 0.001, suffix = "K"))
+
+# 2. Grouped bar chart: Road Road_surface_conditions vs Accident_severity
+
+road_surface_conditions_accident_severity <- accidents %>%
+  filter(!is.na(road_surface_conditions), !is.na(accident_severity)) %>%
+  group_by(road_surface_conditions, accident_severity) %>%
+  summarise(count = n(), .groups = "drop")
+
+ggplot(road_surface_conditions_accident_severity, aes(x = road_surface_conditions, y = count, fill = accident_severity)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(
+    title = "Accident Accident_severity by Road Road_surface_conditions Condition",
+    x = "Road Road_surface_conditions Condition",
+    y = "Accident Count",
+    fill = "Accident_severity"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_y_continuous(labels = label_number(scale = 0.001, suffix = "K"))
+
+# 3. Grouped bar chart: Light_conditions Condition vs Accident_severity
+
+light_conditions_accident_severity <- accidents %>%
+  filter(!is.na(light_conditions), !is.na(accident_severity)) %>%
+  group_by(light_conditions, accident_severity) %>%
+  summarise(count = n(), .groups = "drop")
+
+ggplot(light_conditions_accident_severity, aes(x = light_conditions, y = count, fill = accident_severity)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(
+    title = "Accident Accident_severity by Light_conditions Condition",
+    x = "Light_conditions Condition",
+    y = "Accident Count",
+    fill = "Accident_severity"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_y_continuous(labels = label_number(scale = 0.001, suffix = "K"))
+```
+  
+**Conclusion:**  
+The grouped bar charts reveal that accident severity is strongly associated with environmental and road conditions:  
+•	**Weather Conditions:** Severe accidents are more frequent during adverse weather such as rain, snow, or fog, compared to fine weather. However, the majority of accidents (including slight ones) still occur in good weather, likely due to higher traffic volumes.  
+•	**Road Surface Conditions:** Wet, icy, or snowy road surfaces are linked to a higher proportion of serious and fatal accidents compared to dry conditions, indicating that loss of traction and control are critical factors in accident severity.  
+•	**Light Conditions:** Accidents occurring in darkness—especially when street lighting is poor or absent—are more likely to be severe than those in daylight. Reduced visibility and slower reaction times likely contribute to this trend.  
+  
+  
+### **3.4 Weather & Surface Conditions:**  
+  
+•	Bar charts demonstrated increased accident risk during wet/damp conditions and poor weather.  
+  
+```{r}
+# Bar chart: Accident count by Road Surface Condition
+surface_counts <- accidents %>%
+  group_by(road_surface_conditions) %>%
+  summarise(Count = n(), .groups = "drop") %>%
+  arrange(desc(Count))
+
+ggplot(surface_counts, aes(x = reorder(road_surface_conditions, Count), y = Count)) +
+  geom_bar(stat = "identity", fill = "#BB3E00") +
+  geom_text(aes(label = Count), hjust = -0.1, color = "black", size = 4) +
+  coord_flip() +
+  labs(
+    title = "Accident Counts by Road Surface Condition",
+    x = "Road Surface Condition",
+    y = "Number of Accidents"
+  ) +
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 10)) 
+
+# Bar chart: Accident count by Weather Condition
+weather_counts <- accidents %>%
+  group_by(weather_conditions) %>%
+  summarise(Count = n(), .groups = "drop") %>%
+  arrange(desc(Count))
+
+ggplot(weather_counts, aes(x = reorder(weather_conditions, Count), y = Count)) +
+  geom_bar(stat = "identity", fill = "#BB3E00") +
+  geom_text(aes(label = Count), hjust = -0.1, color = "black", size = 4) +
+  coord_flip() +
+  labs(
+    title = "Accident Counts by Weather Condition",
+    x = "Weather Condition",
+    y = "Number of Accidents"
+  ) +
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 10))
+```
+  
+**Conclusion:**  
+The bar charts reveal that the majority of accidents occur under dry road surface and fine weather conditions, reflecting the fact that these are the most common driving environments. However, there is a notable increase in accident risk during wet or damp road conditions and adverse weather (such as rain, snow, or fog). While fewer journeys may occur in poor conditions, the proportion of accidents relative to exposure is higher, indicating that wet/damp surfaces and bad weather significantly elevate the likelihood of an accident.  
+  
+  
+### **Geographic Patterns:**  
+• Identified urban vs. rural accident trends.  
+  
+```{r, fig.width=4, fig.height=3.5}
+# Exclude 'Unallocated' and Count accidents by Urban_or_Rural_Area
+urban_rural_counts <- accidents %>%
+  filter(!is.na(urban_or_rural_area), urban_or_rural_area != "Unallocated") %>%
+  group_by(urban_or_rural_area) %>%
+  summarise(Count = n(), .groups = "drop")
+
+ggplot(urban_rural_counts, aes(x = urban_or_rural_area, y = Count)) +
+  geom_bar(stat = "identity", fill = "#BB3E00") +
+  geom_text(aes(label = Count), vjust = -0.3, color = "black", size = 5) +
+  labs(
+    title = "Accident Counts: Urban vs Rural Areas",
+    x = "Area Type",
+    y = "Number of Accidents"
+  ) +
+  theme_minimal()
+```
+  
+**Conclusion**  
+The comparison of accident counts between urban and rural areas reveals a significant geographic pattern: urban areas experience a much higher number of reported accidents than rural areas. This trend is consistent with the higher population density, greater vehicle and pedestrian traffic, and more complex road networks typically found in urban environments. However, while the absolute number of accidents is higher in urban areas, rural accidents may still be more severe due to higher average speeds and longer emergency response times.  
+  
+  
+# **Step 4: ACT**  
+  
+### **Major Findings: Addressing Critical Questions**  
+  
+**1. Which road classes and junction types are most prone to accidents?**  
+**Analysis:**  
+•	The majority of accidents occur on **'A' class roads** and **Unclassified roads**. These roads likely see higher traffic volumes or more complex driving conditions.  
+•	For junctions, **"Not at junction or within 20 metres"** accounts for the largest number of accidents, followed by **"T or staggered junctions" and "Crossroads"**.  
+•	**Key Highlight:**  
+   >	'A' roads and unclassified roads are hotspots for accidents.  
+   >	T-junctions and crossroads are the most accident-prone junction types.  
+  
+**2. How do accident patterns vary by day of week and time of day?**  
+**Analysis:**  
+•	**Friday** consistently records the highest number of accidents, especially for 'A' class roads.  
+•	Accidents peak during **morning (7–9 AM)** and **evening (4–7 PM)** rush hours, aligning with commuter traffic patterns.  
+•	**Key Highlight:**  
+   > Accident risk is highest on Fridays and during typical commuting hours, suggesting the need for targeted interventions at these times.  
+  
+**3. What is the relationship between weather/road surface conditions and accident severity?**  
+**Analysis:**  
+•	Most accidents occur in **fine weather and on dry roads** (reflecting exposure), but **the risk and severity of accidents increase significantly during wet, damp, or icy conditions.**  
+•	**Adverse weather (rain, snow, fog)** and **wet/icy surfaces** are associated with a higher proportion of serious and fatal accidents.  
+•	**Key Highlight:**  
+   > Severe accidents are more likely in poor weather and when road surfaces are not dry, highlighting the importance of weather-responsive safety measures.  
+  
+**4. Are there specific conditions or locations where severe accidents are more likely?**  
+**Analysis:**  
+•	**Severe accidents** are more frequent:  
+   > At **night or in poor lighting conditions.**  
+   > On **wet/icy road surfaces.**  
+   > At **complex junctions** (especially T-junctions and crossroads).  
+   > On **major roads ('A' roads)** and certain unclassified roads.  
+•	**Key Highlight:**  
+Severe accidents are concentrated at night, in adverse weather, and at complex or poorly lit junctions.  
+  
+  
+  
+### **Key Insights & Recommendations**    
+  
+•	**Resource Allocation:**  
+Focus enforcement and safety campaigns on 'A' roads, unclassified roads, and high-risk junctions, especially during Friday rush hours.  
+  
+•	**Infrastructure Improvements:**  
+Prioritize upgrades (better lighting, signage, anti-skid surfaces) at accident-prone junctions and on roads with high accident severity.  
+  
+•	**Weather-Responsive Actions:**  
+Deploy real-time alerts and increase patrols during adverse weather, especially on major roads and at night.  
+  
+•	**Targeted Education:**  
+Run public awareness campaigns about the dangers of wet/icy roads, night driving, and high-risk junctions.
   
