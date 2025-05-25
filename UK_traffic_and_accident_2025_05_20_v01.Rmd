@@ -104,3 +104,49 @@ For this analysis, I imported one key datasets:
 accidents <- read.csv("Accident_Information.csv", header = TRUE, sep = ",")
 ```
   
+**Preview and Understand Data Structure**
+  
+```{r, echo=TRUE, results='hide'}
+str(accidents) 
+head(accidents)
+str(accidents)  
+glimpse(accidents)  
+summary(accidents) 
+```
+  
+  
+### **Problems Identified in the Data**  
+  
+•	**Missing and Incomplete Data**:
+Several fields, such as Junction_Control, LSOA_of_Accident_Location, and some location coordinates, contain missing or "Data missing or out of range" values. This limits the completeness and reliability of analyses that rely on these fields.  
+  
+•	**Inconsistent Data Formats**:
+While most date and time fields are consistent, some categorical fields (e.g., 1st_Road_Class, 2nd_Road_Class) use different labels or have "Unclassified" entries, which may require standardization.  
+  
+•	**Potential Duplicate Records**:
+There may be duplicate accident entries, particularly if the same accident is recorded with slight variations. This could skew summary statistics if not addressed.  
+  
+•	**Mismatched Data Types**:
+Some key columns, such as road numbers, may be stored as numeric in some cases and as character in others, which can cause issues during data merging or filtering.  
+  
+•	**Ambiguous or Broad Categories**:
+Certain columns, such as Special_Conditions_at_Site or Weather_Conditions, include broad or ambiguous categories (e.g., "None," "Unknown"), which may mask important details.  
+  
+•	**Outliers and Data Entry Errors**:
+Unusual or out-of-range values (such as "Data missing or out of range" for junction details) suggest possible data entry errors that need to be checked.  
+  
+  
+### **Data Cleaning**
+  
+**Identify and Remove Duplicates Values**
+  
+```{r}
+# Check how many duplicate rows there are
+sum(duplicated(accidents))
+```
+  
+```{r}
+# Remove duplicate rows
+accidents <- accidents[!duplicated(accidents), ]
+```
+  
